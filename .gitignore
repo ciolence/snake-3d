@@ -2,3 +2,7 @@ __pycache__/
 *.py[cod]
 .venv/
 *.log
+
+# Local-only agent working docs - never published
+AGENTS.md
+MEMORY.md

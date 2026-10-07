@@ -22,8 +22,6 @@ Hold to steer; quick taps are latched. Mouse drag = orbit, wheel = zoom,
 
 ## Docs
 
-- `MEMORY.md` - project memory / changelog (living).
-- `AGENTS.md` - working rules for AI tools in this workspace (living).
 - `docs/AGENT_GUIDE.md` - tutorial: how to connect your algorithm.
 - `docs/ALGORITHM_SPEC.md` - normative control contract, v1.0 (authoritative).
 - `agents/template_agent.py` - starter template; `agents/random_agent.py` - demo.
