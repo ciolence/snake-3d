@@ -87,6 +87,16 @@ def intent_from_keys(keys) -> Tuple[float, float, float]:
     return (ix, iy, idepth)
 
 
+
+def merge_intents(*intents: Tuple[float, float, float]) -> Tuple[float, float, float]:
+    """Vector-sum of screen-space intents (held + latched taps)."""
+    ix = iy = idepth = 0.0
+    for (x, y, d) in intents:
+        ix += x
+        iy += y
+        idepth += d
+    return (ix, iy, idepth)
+
 def intent_from_names(names: Iterable[str]) -> Tuple[float, float, float]:
     """Test/headless helper: names like {'w','a','out','in'}."""
     mapping = {

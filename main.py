@@ -13,7 +13,14 @@ import pygame
 
 from agents.base_agent import BaseAgent
 from game.config import Config
-from game.controller import MOVE_KEYS, action_mapping_hint, choose_from_held
+from game.controller import (
+    KEY_INTENTS,
+    MOVE_KEYS,
+    action_mapping_hint,
+    choose_action,
+    intent_from_keys,
+    merge_intents,
+)
 from game.engine import SnakeGame
 from game.renderer import Renderer
 
@@ -66,6 +73,10 @@ def main() -> None:
     # frames (the old bug: a keypress cleared each 60fps frame only landed
     # if a slower game step happened to run that same frame).
     held = {key: False for key in MOVE_KEYS}
+    # Latched tap intent: every KEYDOWN adds its screen vector here, so a
+    # quick tap that is released before the next (slow) logic step is still
+    # honored. Consumed one step at a time (oldest first).
+    tap_queue: list = []
 
     running = True
     while running:
@@ -83,11 +94,15 @@ def main() -> None:
             elif event.type == pygame.KEYDOWN:
                 if event.key in held:
                     held[event.key] = True
+                    intent = KEY_INTENTS.get(event.key)
+                    if intent is not None and len(tap_queue) < 8:
+                        tap_queue.append(intent)
                 if event.key == pygame.K_ESCAPE:
                     running = False
                 elif event.key == pygame.K_p:
                     paused = not paused
                 elif event.key == pygame.K_n:
+                    tap_queue.clear()
                     game.reset()
                     if agent:
                         agent.reset()
@@ -114,10 +129,16 @@ def main() -> None:
                     # Merge event-tracked state with live polling so a key
                     # held before window focus still steers.
                     merged = {k: (held.get(k, False) or bool(keys[k])) for k in held}
-                    action = (choose_from_held(merged, renderer.camera.yaw,
-                                              renderer.camera.pitch,
-                                              game.direction, game.legal_actions())
-                              or game.direction)
+                    intent = merge_intents(
+                        intent_from_keys(merged),
+                        tap_queue.pop(0) if tap_queue else (0.0, 0.0, 0.0),
+                    )
+                    if intent == (0.0, 0.0, 0.0):
+                        action = game.direction
+                    else:
+                        action = choose_action(intent, renderer.camera.yaw,
+                                             renderer.camera.pitch,
+                                             game.direction, game.legal_actions())
                 game.step(action)
 
         state = game.get_state()
