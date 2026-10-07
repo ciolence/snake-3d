@@ -20,13 +20,13 @@ class MyAgent(BaseAgent):
 2. Run it:
 
 ```powershell
-E:/anaconda3/python.exe main.py --mode ai --agent agents.my_agent.MyAgent
+python main.py --mode ai --agent agents.my_agent.MyAgent
 ```
 
 3. Optional speed / arena flags:
 
 ```powershell
-E:/anaconda3/python.exe main.py --mode ai --agent agents.my_agent.MyAgent --speed 12 --grid 15 --seed 7
+python main.py --mode ai --agent agents.my_agent.MyAgent --speed 12 --grid 15 --seed 7
 ```
 
 ## 2. State dict (input to your algorithm)

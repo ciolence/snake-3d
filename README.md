@@ -1,14 +1,14 @@
 # 3D Snake (full 3D movement, PyOpenGL)
 
-Software: `E:/anaconda3/python.exe` + `pygame` + `PyOpenGL` + `numpy` (all pre-installed, nothing else needed).
+Requirements: Python 3 + `pygame` + `PyOpenGL` + `numpy`.
 
 ## Run
 
 ```powershell
-E:/anaconda3/python.exe main.py --mode human
-E:/anaconda3/python.exe main.py --mode ai --agent agents.random_agent.RandomAgent
-E:/anaconda3/python.exe tests/test_engine.py
-E:/anaconda3/python.exe tests/test_control.py
+python main.py --mode human
+python main.py --mode ai --agent agents.random_agent.RandomAgent
+python tests/test_engine.py
+python tests/test_control.py
 ```
 
 Flags: `--grid 15` `--speed 8` `--wrap` `--rotate` `--seed 7`
@@ -23,5 +23,5 @@ Hold to steer; quick taps are latched. Mouse drag = orbit, wheel = zoom,
 ## Docs
 
 - `docs/AGENT_GUIDE.md` - tutorial: how to connect your algorithm.
-- `docs/ALGORITHM_SPEC.md` - normative control contract, v1.0 (authoritative).
+- `docs/ALGORITHM_SPEC.md` - normative control contract, v1.1 (authoritative).
 - `agents/template_agent.py` - starter template; `agents/random_agent.py` - demo.

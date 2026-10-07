@@ -1,4 +1,4 @@
-# Algorithm Control Spec - 3D Snake (living document, v1.0)
+# Algorithm Control Spec - 3D Snake (living document, v1.1)
 
 > **Normative contract** for any algorithm that plays this game. The friendly
 > tutorial is `docs/AGENT_GUIDE.md`; when the two disagree, **this file wins**.
@@ -10,7 +10,7 @@
 1. Write a module under `agents/`, e.g. `agents/my_agent.py`.
 2. Expose a class subclassing `agents.base_agent.BaseAgent` implementing:
    `get_action(self, state: dict) -> str`, plus optional `reset(self)`.
-3. Run: `E:/anaconda3/python.exe main.py --mode ai --agent agents.my_agent.MyAgent [--grid N] [--speed S] [--wrap] [--seed K]`.
+3. Run: `python main.py --mode ai --agent agents.my_agent.MyAgent [--grid N] [--speed S] [--wrap] [--seed K]`.
 4. Headless use (training, no window): import `game.engine.SnakeGame` + `game.config.Config` directly.
 
 ## 2. Action space (output)
@@ -105,9 +105,11 @@ print(state["score"], state["steps"], info)
 
 ## 8. Versioning
 
+- `v1.1` (2026-10-07): no contract change - the section 1.3 run command is portable now (`python main.py ...` instead of a machine-specific interpreter path).
 - `v1.0` (2026-10-07): initial contract. Changes bump minor (additive/clarify) or major (dynamics, rewards, keys) versions and are logged here + in `MEMORY.md`.
 - Planned (not promised): vector/batch observations, per-step time limits, replay/score files - pending user Q4 scope decision.
 
 ## 9. Changelog
 
+- `v1.1 2026-10-07` Portable run command (section 1.3); no normative change.
 - `v1.0 2026-10-07` Created from engine behavior + AGENT_GUIDE.
