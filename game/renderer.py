@@ -20,6 +20,19 @@ def _cell_center(cell: Tuple[int, int, int], n: int) -> Tuple[float, float, floa
     return (x - h + 0.5, y - h + 0.5, z - h + 0.5)
 
 
+def _make_font(size: int, bold: bool = False):
+    """Robust font loader: avoids pygame SysFont win32 registry crash."""
+    pygame.font.init()
+    try:
+        return pygame.font.SysFont("consolas", size, bold=bold)
+    except Exception:
+        pass
+    try:
+        return pygame.font.SysFont(None, size, bold=bold)
+    except Exception:
+        return pygame.font.Font(None, size)
+
+
 class Camera:
     def __init__(self, distance: float = 30.0):
         self.yaw = 45.0
@@ -50,9 +63,8 @@ class Renderer:
         self.width = width
         self.height = height
         self.camera = Camera(distance=grid_size * 2.4 + 8.0)
-        # Snapshot the font module state; text panel is drawn with pygame 2D overlay.
-        self.font = pygame.font.SysFont("consolas", 18)
-        self.big_font = pygame.font.SysFont("consolas", 44, bold=True)
+        self.font = _make_font(18)
+        self.big_font = _make_font(44, bold=True)
 
     # ---------- per-frame ----------
     def draw(self, state: Dict, mode: str, paused: bool, auto_rotate: bool) -> None:

@@ -1,4 +1,4 @@
-"""Entry point: human play or algorithm play.
+r"""Entry point: human play or algorithm play.
 
 Human:  E:\anaconda3\python.exe main.py --mode human
 AI:     E:\anaconda3\python.exe main.py --mode ai --agent agents.random_agent.RandomAgent
