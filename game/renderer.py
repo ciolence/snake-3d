@@ -4,12 +4,16 @@ from __future__ import annotations
 from typing import Dict, Tuple
 
 import pygame
-from pygame.locals import DOUBLEBUF, OPENGL, QUIT
+from pygame.locals import DOUBLEBUF, OPENGL
 from OpenGL.GL import (
-    GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, GL_DEPTH_TEST, GL_LINES,
-    GL_MODELVIEW, GL_PROJECTION, GL_QUADS, glBegin, glClear, glClearColor,
-    glColor3f, glEnable, glEnd, glLoadIdentity, glMatrixMode, glPopMatrix,
-    glPushMatrix, glTranslatef, glVertex3f, glViewport,
+    GL_BLEND, GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, GL_DEPTH_TEST,
+    GL_LINES, GL_LINEAR, GL_MODELVIEW, GL_ONE_MINUS_SRC_ALPHA, GL_PROJECTION,
+    GL_QUADS, GL_RGBA, GL_SRC_ALPHA, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+    GL_TEXTURE_MIN_FILTER, GL_UNSIGNED_BYTE, glBegin, glBindTexture,
+    glBlendFunc, glClear, glClearColor, glColor3f, glDisable, glEnable,
+    glEnd, glLoadIdentity, glMatrixMode, glOrtho, glPopMatrix, glPushMatrix,
+    glTexCoord2f, glTexImage2D, glTexParameteri, glVertex2f, glVertex3f,
+    glViewport,
 )
 from OpenGL.GLU import gluLookAt, gluPerspective
 
@@ -44,15 +48,21 @@ class Camera:
         self.pitch = max(5.0, min(85.0, self.pitch + dy * 0.3))
 
     def zoom(self, amount: float) -> None:
-        self.distance = max(8.0, min(90.0, self.distance + amount))
+        self.distance = max(8.0, min(120.0, self.distance + amount))
 
 
 class Renderer:
     """Owns the pygame + OpenGL window and draws one game state."""
 
+    # Fixed GL texture name for the HUD overlay. Plain int avoids any
+    # glGenTextures/glDeleteTextures wrapper-shape issues; binding an
+    # unused name is legal OpenGL and we reuse it every frame.
+    HUD_TEX_ID = 7
+
     def __init__(self, grid_size: int, width: int = 1100, height: int = 750):
         pygame.init()
         pygame.display.set_caption("3D Snake  (drag=orbit | wheel=zoom | WASD+R/F move)")
+        pygame.display.gl_set_attribute(pygame.GL_DEPTH_SIZE, 24)
         pygame.display.set_mode((width, height), DOUBLEBUF | OPENGL)
         glViewport(0, 0, width, height)
         glMatrixMode(GL_PROJECTION)
@@ -62,17 +72,18 @@ class Renderer:
         glEnable(GL_DEPTH_TEST)
         self.width = width
         self.height = height
-        self.camera = Camera(distance=grid_size * 2.4 + 8.0)
+        self.camera = Camera(distance=grid_size * 2.0 + 6.0)
         self.font = _make_font(18)
         self.big_font = _make_font(44, bold=True)
 
     # ---------- per-frame ----------
     def draw(self, state: Dict, mode: str, paused: bool, auto_rotate: bool) -> None:
+        """Draw the 3D scene. NOTE: no flip here; draw_overlay() presents."""
         import math
         if auto_rotate:
             self.camera.yaw = (self.camera.yaw + 0.15) % 360.0
         n = state["grid_size"]
-        glClearColor(0.03, 0.04, 0.07, 1.0)
+        glClearColor(0.05, 0.07, 0.12, 1.0)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glLoadIdentity()
         yaw = math.radians(self.camera.yaw)
@@ -95,10 +106,8 @@ class Renderer:
             scale = 0.92 if t > 0.99 else 0.8
             self._draw_cube(cell, n, color, scale=scale)
 
-        pygame.display.flip()
-
     def draw_overlay(self, state: Dict, mode: str, paused: bool, fps: float, msg: str = "") -> None:
-        """2D HUD text drawn on top of the 3D scene."""
+        """Draw the 2D HUD as a single OpenGL texture, then present (one flip)."""
         lines = [
             f"Mode: {mode.upper()}   Score: {state.get('score', 0)}   Length: {state.get('length', 0)}",
             f"Steps: {state.get('steps', 0)}   Head: {state.get('head')}   Food: {state.get('food')}",
@@ -106,23 +115,61 @@ class Renderer:
             "Move: W/S fwd/back, A/D left/right, R/F up/down | drag orbit, wheel zoom",
             "P pause | N new game | +/- speed | ESC quit",
         ]
+        hud = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        hud.fill((0, 0, 0, 0))
         y = 8
         for line in lines:
             surf = self.font.render(line, True, (230, 235, 240))
-            pygame.display.get_surface().blit(surf, (10, y))
-            y += 22
+            hud.blit(surf, (10, y))
+            y += surf.get_height() + 4
         if paused:
             surf = self.big_font.render("PAUSED", True, (255, 220, 80))
-            pygame.display.get_surface().blit(surf, (self.width // 2 - 110, 20))
+            hud.blit(surf, (self.width // 2 - 110, 20))
         if msg:
             surf = self.big_font.render(msg, True, (255, 90, 90))
-            pygame.display.get_surface().blit(surf, (self.width // 2 - 220, self.height // 2 - 30))
+            hud.blit(surf, (self.width // 2 - 230, self.height // 2 - 30))
+
+        # Orthographic 2D pass for the HUD quad (y grows downward).
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        glOrtho(0, self.width, self.height, 0, -1, 1)
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+        glDisable(GL_DEPTH_TEST)
+        glEnable(GL_TEXTURE_2D)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+        data = pygame.image.tostring(hud, "RGBA", True)
+        glBindTexture(GL_TEXTURE_2D, self.HUD_TEX_ID)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+        glColor3f(1.0, 1.0, 1.0)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, self.width, self.height,
+                     0, GL_RGBA, GL_UNSIGNED_BYTE, data)
+        # tostring(flipped=True): byte row 0 = visual bottom -> v=0 at y=height.
+        glBegin(GL_QUADS)
+        glTexCoord2f(0, 1); glVertex2f(0, 0)
+        glTexCoord2f(1, 1); glVertex2f(self.width, 0)
+        glTexCoord2f(1, 0); glVertex2f(self.width, self.height)
+        glTexCoord2f(0, 0); glVertex2f(0, self.height)
+        glEnd()
+
+        glDisable(GL_BLEND)
+        glDisable(GL_TEXTURE_2D)
+        glEnable(GL_DEPTH_TEST)
+        glPopMatrix()
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
         pygame.display.flip()
 
     # ---------- primitives ----------
     def _draw_arena(self, n: int) -> None:
         h = n / 2.0
-        glColor3f(0.25, 0.35, 0.55)
+        glColor3f(0.40, 0.55, 0.90)
         glBegin(GL_LINES)
         for i in range(n + 1):
             v = -h + i
