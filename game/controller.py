@@ -118,19 +118,48 @@ def choose_action(intent: Tuple[float, float, float], yaw_deg: float,
                   straight_bonus: float = 0.15) -> str:
     """Pick the legal world move best aligned with a screen intent.
 
-    A small bonus for continuing straight kills flicker when two moves
-    score nearly equally (common near diagonal camera angles).
+    W/S are depth-blind: only the on-screen vertical component counts, so
+    W always means "most upward on screen". Near top-down view, where
+    world-vertical moves are nearly edge-on (screen-vertical magnitude
+    below 0.15), W/S switch to the horizontal-plane moves that look most
+    up/down on screen instead. A/D use the screen-horizontal component; only
+    Space/Shift (depth keys) consider depth. A small bonus for
+    continuing straight kills flicker when two moves score nearly equally
+    (common near diagonal camera angles).
     """
     ix, iy, idepth = intent
     if ix == 0.0 and iy == 0.0 and idepth == 0.0:
         return current
+    use_x = ix != 0.0
+    use_y = iy != 0.0
+    use_depth = idepth != 0.0
+    # Near top-down, world-vertical moves are nearly edge-on (they would
+    # read as pure depth, like Space/Shift), so pure W/S skips them in
+    # favour of the ground-plane moves that look most up/down on screen.
+    # Threshold on the actual projection, not on the pitch angle.
+    _up_y = project_action("+y", yaw_deg, pitch_deg)[1]
+    top_down_ws = use_y and not use_x and not use_depth and abs(_up_y) < 0.15
     best = current if current in legal else (legal[0] if legal else current)
     best_score = float("-inf")
     for action in legal:
+        if top_down_ws and action in ("+y", "-y"):
+            continue
         sx, sy, depth = project_action(action, yaw_deg, pitch_deg)
-        score = ix * sx + iy * sy + idepth * depth
+        score = 0.0
+        if use_x:
+            score += ix * sx
+        if use_y:
+            score += iy * sy
+        if use_depth:
+            score += idepth * depth
         if action == current:
             score += straight_bonus
+        # Tie-break: prefer genuinely moving on screen in the intended
+        # sense (kills zero-component "sideways" picks when two moves tie).
+        if use_y and not use_x and not use_depth:
+            score += 1e-6 * (sy if iy > 0 else -sy)
+        elif use_x and not use_y and not use_depth:
+            score += 1e-6 * (sx if ix > 0 else -sx)
         if score > best_score:
             best_score = score
             best = action
