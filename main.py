@@ -1,7 +1,7 @@
 r"""Entry point: human play or algorithm play.
 
-Human:  E:\anaconda3\python.exe main.py --mode human
-AI:     E:\anaconda3\python.exe main.py --mode ai --agent agents.random_agent.RandomAgent
+Human:  PYTHON main.py --mode human
+AI:     PYTHON main.py --mode ai --agent agents.random_agent.RandomAgent
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import pygame
 
 from agents.base_agent import BaseAgent
 from game.config import Config
-from game.controller import key_to_action
+from game.controller import MOVE_KEYS, action_mapping_hint, choose_from_held
 from game.engine import SnakeGame
 from game.renderer import Renderer
 
@@ -55,12 +55,17 @@ def main() -> None:
 
     renderer = Renderer(config.grid_size, config.window_width, config.window_height)
     clock = pygame.time.Clock()
-    pending_action: str | None = None
     paused = False
     speed = config.steps_per_second
     acc = 0.0
     last = time.perf_counter()
     msg = ""
+
+    # Hold-to-steer: remember which move keys are physically down. This is
+    # polled every logic step, so inputs can no longer be dropped between
+    # frames (the old bug: a keypress cleared each 60fps frame only landed
+    # if a slower game step happened to run that same frame).
+    held = {key: False for key in MOVE_KEYS}
 
     running = True
     while running:
@@ -76,23 +81,26 @@ def main() -> None:
             elif event.type == pygame.MOUSEWHEEL:
                 renderer.camera.zoom(-event.y * 1.5)
             elif event.type == pygame.KEYDOWN:
+                if event.key in held:
+                    held[event.key] = True
                 if event.key == pygame.K_ESCAPE:
                     running = False
                 elif event.key == pygame.K_p:
                     paused = not paused
                 elif event.key == pygame.K_n:
                     game.reset()
-                    if agent: agent.reset()
-                    msg = ""; paused = False; acc = 0.0
+                    if agent:
+                        agent.reset()
+                    msg = ""
+                    paused = False
+                    acc = 0.0
                 elif event.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
                     speed = min(config.max_steps_per_second, speed + 1.0)
                 elif event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
                     speed = max(1.0, speed - 1.0)
-                elif args.mode == "human" and game.alive:
-                    nxt = key_to_action(event.key, renderer.camera.yaw,
-                                        game.direction, game.legal_actions())
-                    if nxt:
-                        pending_action = nxt
+            elif event.type == pygame.KEYUP:
+                if event.key in held:
+                    held[event.key] = False
 
         if not paused and game.alive:
             acc += dt
@@ -102,14 +110,23 @@ def main() -> None:
                 if args.mode == "ai" and agent is not None:
                     action = agent.get_action(game.get_state())
                 else:
-                    action = pending_action or game.direction
+                    keys = pygame.key.get_pressed()
+                    # Merge event-tracked state with live polling so a key
+                    # held before window focus still steers.
+                    merged = {k: (held.get(k, False) or bool(keys[k])) for k in held}
+                    action = (choose_from_held(merged, renderer.camera.yaw,
+                                              renderer.camera.pitch,
+                                              game.direction, game.legal_actions())
+                              or game.direction)
                 game.step(action)
-            pending_action = None
 
         state = game.get_state()
         msg = "" if state["alive"] else ("YOU WIN!" if state["won"] else "GAME OVER - press N")
         renderer.draw(state, args.mode, paused, config.auto_rotate or args.rotate)
-        renderer.draw_overlay(state, args.mode, paused, fps, msg)
+        hint = (action_mapping_hint(renderer.camera.yaw, renderer.camera.pitch,
+                                    game.direction, game.legal_actions())
+                if args.mode == "human" else None)
+        renderer.draw_overlay(state, args.mode, paused, fps, msg, hint)
         clock.tick(60)
 
     renderer.close()

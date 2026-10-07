@@ -1,7 +1,7 @@
 """PyOpenGL 3D renderer + camera for the snake game."""
 from __future__ import annotations
 
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import pygame
 from pygame.locals import DOUBLEBUF, OPENGL
@@ -106,13 +106,16 @@ class Renderer:
             scale = 0.92 if t > 0.99 else 0.8
             self._draw_cube(cell, n, color, scale=scale)
 
-    def draw_overlay(self, state: Dict, mode: str, paused: bool, fps: float, msg: str = "") -> None:
+    def draw_overlay(self, state: Dict, mode: str, paused: bool, fps: float, msg: str = "",
+                     hint: Optional[Dict[str, str]] = None) -> None:
         """Draw the 2D HUD as a single OpenGL texture, then present (one flip)."""
         lines = [
             f"Mode: {mode.upper()}   Score: {state.get('score', 0)}   Length: {state.get('length', 0)}",
             f"Steps: {state.get('steps', 0)}   Head: {state.get('head')}   Food: {state.get('food')}",
             f"Dir: {state.get('direction')}   FPS: {fps:.0f}   Cam: yaw {self.camera.yaw:.0f} pitch {self.camera.pitch:.0f}",
-            "Move: W/S fwd/back, A/D left/right, R/F up/down | drag orbit, wheel zoom",
+            ("Move: " + " ".join(f"{k}={v}" for k, v in hint.items())
+             + "  (screen: WASD plane, Spc out, Shf in)" if hint else
+             "Move: W/S fwd/back, A/D left/right, R/F up/down | drag orbit, wheel zoom"),
             "P pause | N new game | +/- speed | ESC quit",
         ]
         hud = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
