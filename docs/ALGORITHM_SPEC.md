@@ -1,4 +1,4 @@
-# Algorithm Control Spec - 3D Snake (living document, v1.1)
+# Algorithm Control Spec - 3D Snake (living document, v1.2)
 
 > **Normative contract** for any algorithm that plays this game. The friendly
 > tutorial is `docs/AGENT_GUIDE.md`; when the two disagree, **this file wins**.
@@ -50,6 +50,11 @@
 6. **Win:** body fills all `grid_size^3` cells -> `won=True`, `done=True`, `food=None`.
 7. **Food spawn:** uniform over empty cells via `random.Random(seed)`; `reset(seed)` re-seeds.
 8. **Determinism:** same `seed` + same action sequence -> identical episode.
+9. **Spawn:** `reset()` keeps the default center spawn (head at arena center, `+x`).
+    `reset(spawn_mode="random")` draws a seeded safe (head, direction) pair;
+    `reset(spawn_mode="custom", spawn_pos=(x,y,z), spawn_direction=D)` uses the given head cell + direction.
+    Every mode guarantees the first step cannot die; invalid or unsafe requests raise `ValueError`.
+    CLI: `--spawn center|random`, `--pos x,y,z` (implies custom), `--dir D`, `--length L`.
 
 ## 5. Rewards and termination
 
@@ -105,11 +110,16 @@ print(state["score"], state["steps"], info)
 
 ## 8. Versioning
 
+- `v1.2` (2026-10-08): additive spawn contract (section 4.9, Config.spawn_*); defaults unchanged.
 - `v1.1` (2026-10-07): no contract change - the section 1.3 run command is portable now (`python main.py ...` instead of a machine-specific interpreter path).
 - `v1.0` (2026-10-07): initial contract. Changes bump minor (additive/clarify) or major (dynamics, rewards, keys) versions and are logged here + in `MEMORY.md`.
 - Planned (not promised): vector/batch observations, per-step time limits, replay/score files - pending user Q4 scope decision.
 
 ## 9. Changelog
+
+- `v1.2 2026-10-08` Safe spawn modes (center/random/custom) + CLI flags; no default change.
+- `v1.1 2026-10-07` Portable run command (section 1.3); no normative change.
+- `v1.0 2026-10-07` Created from engine behavior + AGENT_GUIDE.
 
 - `v1.1 2026-10-07` Portable run command (section 1.3); no normative change.
 - `v1.0 2026-10-07` Created from engine behavior + AGENT_GUIDE.

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 # The six axis-aligned moves. "+y" is up, "-y" is down.
 ACTIONS = ("+x", "-x", "+y", "-y", "+z", "-z")
@@ -22,6 +22,8 @@ OPPOSITE: Dict[str, str] = {
     "+z": "-z", "-z": "+z",
 }
 
+# Spawn selection modes (see game/engine.py + SPEC 4.9).
+SPAWN_MODES = ("center", "random", "custom")
 
 @dataclass
 class Config:
@@ -35,6 +37,12 @@ class Config:
     window_width: int = 1100
     window_height: int = 750
     auto_rotate: bool = False    # slowly orbit the camera
+    # Spawn: "center" (head at arena center), "random" (seeded safe
+    # draw) or "custom" (spawn_pos + spawn_direction, which must be
+    # safe or SnakeGame.reset raises ValueError).
+    spawn_mode: str = "center"
+    spawn_pos: Optional[Tuple[int, int, int]] = None
+    spawn_direction: str = "+x"
 
     # Rewards for algorithm training / scoring.
     reward_food: float = 10.0

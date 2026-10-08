@@ -5,9 +5,31 @@ import random
 from collections import deque
 from typing import Any, Deque, Dict, List, Optional, Tuple
 
-from .config import ACTIONS, ACTION_VECTORS, OPPOSITE, Config
+from .config import ACTIONS, ACTION_VECTORS, OPPOSITE, SPAWN_MODES, Config
 
 Cell = Tuple[int, int, int]
+
+
+def parse_spawn_pos(text: str, grid_size: int) -> Cell:
+    """Parse 'x,y,z' (0-based ints) into a head cell; raise ValueError."""
+    parts = [p.strip() for p in str(text).split(",")]
+    if len(parts) != 3:
+        raise ValueError(f"bad spawn '{text}': want 'x,y,z' (3 parts)")
+    try:
+        cell = (int(parts[0]), int(parts[1]), int(parts[2]))
+    except ValueError:
+        raise ValueError(f"bad spawn '{text}': want 'x,y,z' with integers") from None
+    n = grid_size
+    if not all(0 <= c < n for c in cell):
+        raise ValueError(f"bad spawn '{text}': each coord must be 0..{n - 1}")
+    return cell
+
+
+def _body_from_head(head: Cell, direction: str, length: int) -> List[Cell]:
+    """Straight body: head first, trailing opposite of `direction`."""
+    dx, dy, dz = ACTION_VECTORS[direction]
+    hx, hy, hz = head
+    return [(hx - i * dx, hy - i * dy, hz - i * dz) for i in range(length)]
 
 
 class SnakeGame:
@@ -28,18 +50,45 @@ class SnakeGame:
         self.reset()
 
     # ---------- lifecycle ----------
-    def reset(self, seed: int | None = None) -> Dict[str, Any]:
+    def reset(self, seed: int | None = None, spawn_mode: str | None = None,
+              spawn_pos: Cell | None = None,
+              spawn_direction: str | None = None) -> Dict[str, Any]:
+        """Reset the episode. Optional per-call spawn overrides (else config).
+
+        spawn_mode: "center" (head at arena center), "random" (seeded
+        safe draw of head cell + direction) or "custom" (spawn_pos +
+        spawn_direction). Every mode guarantees the first step cannot
+        die; invalid/unsafe requests raise ValueError.
+        """
         if seed is not None:
             self.rng.seed(seed)
+        mode = spawn_mode or self.config.spawn_mode
+        if mode not in SPAWN_MODES:
+            raise ValueError(f"bad spawn_mode '{mode}': want one of {SPAWN_MODES}")
+        direction = spawn_direction or self.config.spawn_direction
+        if direction not in ACTIONS:
+            raise ValueError(f"bad spawn direction '{direction}': want one of {ACTIONS}")
+        pos = spawn_pos if spawn_pos is not None else self.config.spawn_pos
         n = self.config.grid_size
-        cx = cy = cz = n // 2
         length = min(self.config.start_length, n)
-        # Head at center, body trailing along -x.
-        self.body = deque([(cx - i, cy, cz) for i in range(length - 1, -1, -1)])
-        # deque head at left: reverse so body[0] is head
-        self.body = deque(reversed(self.body))
+        if mode == "center":
+            c = n // 2
+            body = _body_from_head((c, c, c), direction, length)
+            reason = self._unsafe_reason(body, direction)
+            if reason is not None:
+                raise ValueError(f"center spawn unsafe on grid {n}: {reason}")
+        elif mode == "random":
+            body, direction = self._random_safe_body(n, length)
+        else:  # custom
+            if pos is None:
+                raise ValueError("custom spawn needs spawn_pos (x,y,z)")
+            body = _body_from_head(pos, direction, length)
+            reason = self._unsafe_reason(body, direction)
+            if reason is not None:
+                raise ValueError(f"unsafe custom spawn {pos} {direction}: {reason}")
+        self.body = deque(body)
         self.prev_body = list(self.body)
-        self.direction = "+x"
+        self.direction = direction
         self.score = 0
         self.steps = 0
         self.alive = True
@@ -47,6 +96,49 @@ class SnakeGame:
         self.grew_last_step = False
         self.food = self._spawn_food()
         return self.get_state()
+
+    def _unsafe_reason(self, body: List[Cell], direction: str) -> Optional[str]:
+        """Why `body` heading `direction` would die on the first step (None = safe).
+
+        Safe means: whole body inside the arena, an empty cell left for
+        food, and the next head cell neither a wall (non-wrap) nor own
+        body (tail cell vacates, so it is safe). Food spawns afterwards
+        on an empty cell, so landing on it stays safe.
+        """
+        n = self.config.grid_size
+        if any(not (0 <= c < n) for cell in body for c in cell):
+            return "body leaves the arena"
+        if len(set(body)) != len(body):
+            return "body overlaps itself"
+        if len(body) >= n ** 3:
+            return "no empty cell left for food"
+        dx, dy, dz = ACTION_VECTORS[direction]
+        hx, hy, hz = body[0]
+        nx, ny, nz = hx + dx, hy + dy, hz + dz
+        if self.config.wrap_mode:
+            nx, ny, nz = nx % n, ny % n, nz % n
+        elif not (0 <= nx < n and 0 <= ny < n and 0 <= nz < n):
+            return "first step hits a wall"
+        if (nx, ny, nz) in set(body[:-1]):
+            return "first step hits own body"
+        return None
+
+    def _random_safe_body(self, n: int, length: int) -> Tuple[List[Cell], str]:
+        """Uniform draw among all safe (head, direction) pairs (seeded)."""
+        if n ** 3 * len(ACTIONS) <= 60000:
+            cands = [(body, a) for x in range(n) for y in range(n)
+                     for z in range(n) for a in ACTIONS
+                     if self._unsafe_reason(body := _body_from_head((x, y, z), a, length), a) is None]
+            if not cands:
+                raise ValueError(f"no safe random spawn on grid {n} (length {length})")
+            return self.rng.choice(cands)
+        for _ in range(4000):  # huge arenas: sampled attempts instead
+            a = self.rng.choice(ACTIONS)
+            body = _body_from_head((self.rng.randrange(n), self.rng.randrange(n),
+                                    self.rng.randrange(n)), a, length)
+            if self._unsafe_reason(body, a) is None:
+                return body, a
+        raise ValueError(f"no safe random spawn found on grid {n} (length {length})")
 
     # ---------- core step ----------
     def step(self, action: str) -> Tuple[Dict[str, Any], float, bool, Dict[str, Any]]:

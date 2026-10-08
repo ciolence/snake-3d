@@ -26,7 +26,7 @@ python main.py --mode ai --agent agents.my_agent.MyAgent
 3. Optional speed / arena flags:
 
 ```powershell
-python main.py --mode ai --agent agents.my_agent.MyAgent --speed 12 --grid 15 --seed 7
+python main.py --mode ai --agent agents.my_agent.MyAgent --speed 12 --grid 15 --seed 7 --spawn random
 ```
 
 ## 2. State dict (input to your algorithm)
@@ -65,7 +65,7 @@ spot. Unknown strings also fall back to going straight.
 - Eating grows by 1 and respawns food on a random empty cell.
 - Hitting a wall or your own body ends the episode (`alive=False`).
 - Your `get_action` is called once per logic step (default 8 steps/sec,
-  change with `--speed`). Keep it fast; slow agents make the game stutter.
+  `--speed`, live +/- keys, or the setup menu (M)). Slow agents stutter the game.
 
 ## 5. Headless training (no window)
 

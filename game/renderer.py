@@ -1,7 +1,4 @@
-"""PyOpenGL 3D renderer + camera for the snake game."""
-from __future__ import annotations
-
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import pygame
 from pygame.locals import DOUBLEBUF, OPENGL
@@ -75,6 +72,9 @@ class Renderer:
         self.camera = Camera(distance=grid_size * 2.0 + 6.0)
         self.font = _make_font(18)
         self.big_font = _make_font(44, bold=True)
+    def set_grid(self, grid_size: int) -> None:
+        self.camera.distance = grid_size * 2.0 + 6.0
+
 
     # ---------- per-frame ----------
     def draw(self, state: Dict, mode: str, paused: bool, auto_rotate: bool) -> None:
@@ -106,8 +106,9 @@ class Renderer:
             scale = 0.92 if t > 0.99 else 0.8
             self._draw_cube(cell, n, color, scale=scale)
 
-    def draw_overlay(self, state: Dict, mode: str, paused: bool, fps: float, msg: str = "",
-                     hint: Optional[Dict[str, str]] = None) -> None:
+    def draw_overlay(self, state: Dict, mode: str, paused: bool, fps: float, msg: str = "", hint: Optional[Dict[str, str]] = None,
+                     footer: str = "", menu_lines: Optional[List[str]] = None, menu_row: int = 0,
+                     menu_edit=None, menu_error: str = "") -> None:
         """Draw the 2D HUD as a single OpenGL texture, then present (one flip)."""
         lines = [
             f"Mode: {mode.upper()}   Score: {state.get('score', 0)}   Length: {state.get('length', 0)}",
@@ -116,7 +117,7 @@ class Renderer:
             ("Move: " + " ".join(f"{k}={v}" for k, v in hint.items())
              + "  (screen: WASD plane, Spc out, Shf in)" if hint else
              "Move: W/S fwd/back, A/D left/right, R/F up/down | drag orbit, wheel zoom"),
-            "P pause | N new game | +/- speed | ESC quit",
+            footer or "P pause | N new game | +/- speed | Tab mode | M setup | ESC quit",
         ]
         hud = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         hud.fill((0, 0, 0, 0))
@@ -131,6 +132,8 @@ class Renderer:
         if msg:
             surf = self.big_font.render(msg, True, (255, 90, 90))
             hud.blit(surf, (self.width // 2 - 230, self.height // 2 - 30))
+        if menu_lines:
+            self._draw_menu(hud, menu_lines, menu_row, menu_edit, menu_error)
 
         # Orthographic 2D pass for the HUD quad (y grows downward).
         glMatrixMode(GL_PROJECTION)
@@ -214,6 +217,45 @@ class Renderer:
         for a, b in edges:
             glVertex3f(*verts[a]); glVertex3f(*verts[b])
         glEnd()
+
+
+    def _draw_menu(self, hud, menu_lines, menu_row, menu_edit, menu_error):
+        labels = ("Control", "Agent", "Speed", "Grid", "Wrap", "Rotate",
+                  "Spawn", "Spawn pos", "Spawn dir", "Seed", "Length")
+        edit_rows = {"agent": 1, "speed": 2, "grid": 3, "pos": 7,
+                     "seed": 9, "length": 10}
+        key = menu_edit[0] if menu_edit else None
+        buf = menu_edit[1] if menu_edit else ""
+        err_h = 26 if menu_error else 0
+        pw, ph = 700, 96 + 24 * len(menu_lines) + err_h
+        px, py = (self.width - pw) // 2, (self.height - ph) // 2
+        panel = pygame.Surface((pw, ph), pygame.SRCALPHA)
+        panel.fill((8, 12, 20, 232))
+        pygame.draw.rect(panel, (120, 170, 230), panel.get_rect(), 2)
+        panel.blit(self.font.render("SETUP (Up/Down select, Left/Right tweak,", True, (255, 220, 120)), (16, 8))
+        panel.blit(self.font.render("Enter edits the field, Enter on Control/Wrap/Rotate/Spawn/Dir applies all + new game,", True, (255, 220, 120)), (16, 28))
+        panel.blit(self.font.render("Esc closes, Tab flips human/AI)", True, (255, 220, 120)), (16, 48))
+        y0 = 74
+        for i, text in enumerate(menu_lines):
+            unit = "   "
+            if i < len(labels) and labels[i] == "Control":
+                unit = "M/TAB "
+            elif i in (2, 3, 6, 8, 10):
+                unit = "+/- "
+            elif i in (4, 5):
+                unit = "L/R "
+            mark = ">> " if i == menu_row else "   "
+            shown = text
+            if key is not None and edit_rows.get(key) == i:
+                shown = text + "  [" + buf + "_]"
+            color = (140, 220, 255) if i == menu_row else (235, 238, 242)
+            panel.blit(self.font.render(mark + unit + shown, True, color), (16, y0 + 24 * i))
+        if menu_error:
+            panel.blit(self.font.render("ERR: " + menu_error, True, (255, 120, 120)),
+                       (16, y0 + 24 * len(menu_lines) + 2))
+        panel.blit(self.font.render("Enter on this row applies ALL settings + new game.", True, (150, 160, 175)),
+                   (16, ph - 24))
+        hud.blit(panel, (px, py))
 
     def close(self) -> None:
         pygame.quit()
