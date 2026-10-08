@@ -102,6 +102,56 @@ def test_bad_mode_and_direction_rejected():
             raise AssertionError(f"accepted {kwargs}")
 
 
+
+
+def test_discover_agents_lists_bundled():
+    import main
+    opts = main.discover_agents()
+    assert "agents.random_agent.RandomAgent" in opts, opts
+    assert "agents.template_agent.TemplateAgent" in opts, opts
+    assert opts == sorted(opts), opts
+
+
+def test_cycle_agent_wraps_and_snaps():
+    import main
+    opts = ["a.A", "b.B"]
+    assert main.cycle_agent("a.A", opts, 1) == "b.B"
+    assert main.cycle_agent("b.B", opts, 1) == "a.A"
+    assert main.cycle_agent("zzz", opts, 1) == "b.B"
+    assert main.cycle_agent("a.A", [], 1) == "a.A"
+
+
+def test_agent_row_tweak_never_crashes():
+    import main
+    from game.config import Config
+    opts = main.discover_agents()
+    d = main.new_settings("ai", opts[0], Config(), None)
+    main.adjust_draft(d, 1, 1, 20.0, opts)
+    assert d["agent"] in opts, d
+    main.adjust_draft(d, 1, 1, 20.0, [])
+    assert d["agent"] in opts, d
+    rows = main.menu_hint(d, opts)
+    assert rows[1].startswith("Agent [") and "/2" in rows[1], rows[1]
+
+
+def test_typed_strings_never_crash_apply():
+    import argparse
+    import main
+    from game.config import Config
+    ns = argparse.Namespace(mode="human", agent="x", grid=15, speed=8.0,
+                            wrap=False, rotate=False, seed=None, length=3,
+                            spawn="center", pos=None, dir="+x")
+    cfg = Config()
+    d = main.new_settings("ai", "agents.random_agent.RandomAgent", Config(), None)
+    d.update({"grid": "15", "speed": "6", "length": "3", "seed": "4"})
+    mode, agent, seed, err = main.apply_draft(d, ns, cfg, main.load_agent)
+    assert err == "", err
+    assert (cfg.grid_size, cfg.start_length) == (15, 3), (cfg.grid_size, cfg.start_length)
+    assert seed == 4, seed
+    d["length"] = "not-a-number"
+    mode, agent, seed, err = main.apply_draft(d, ns, cfg, main.load_agent)
+    assert err == "", err
+    assert cfg.start_length >= 1, cfg.start_length
 if __name__ == "__main__":
     for name, fn in sorted({k: v for k, v in globals().items() if k.startswith("test_")}.items()):
         fn()

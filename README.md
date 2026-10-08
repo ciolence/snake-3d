@@ -19,7 +19,9 @@ Flags: `--grid 15` `--speed 8` `--wrap` `--rotate` `--seed 7 --length 3 --spawn 
 Screen-relative, adapts to camera: `W/S` up/down on screen, `A/D` left/right on screen
 (arrows work too), `Space/R` out of screen toward you, `Shift/F` into screen.
 Hold to steer; quick taps are latched. Mouse drag = orbit, wheel = zoom,
-`P` pause, `N` new game, `+/-` speed, `ESC` quit. `Tab` switches human/AI, `M` opens setup (mode, agent, speed, grid, wrap, spawn, seed, length). HUD shows the live mapping.
+`P` pause, `N` new game, `+/-` speed, `ESC` quit. `Tab` switches human/AI, `M` opens setup
+(mode, speed, grid, wrap, spawn, seed, length; `Agent [n/m]` lists every detected algorithm,
+`Left/Right` steps through it). HUD shows the live mapping.
 
 ## Docs
 

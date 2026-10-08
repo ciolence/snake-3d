@@ -237,13 +237,16 @@ class Renderer:
         panel.blit(self.font.render("Esc closes, Tab flips human/AI)", True, (255, 220, 120)), (16, 48))
         y0 = 74
         for i, text in enumerate(menu_lines):
-            unit = "   "
-            if i < len(labels) and labels[i] == "Control":
+            if i == 0:
                 unit = "M/TAB "
+            elif i == 1:
+                unit = "L/R list "
             elif i in (2, 3, 6, 8, 10):
                 unit = "+/- "
             elif i in (4, 5):
                 unit = "L/R "
+            else:
+                unit = "   "
             mark = ">> " if i == menu_row else "   "
             shown = text
             if key is not None and edit_rows.get(key) == i:

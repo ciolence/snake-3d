@@ -29,6 +29,11 @@ python main.py --mode ai --agent agents.my_agent.MyAgent
 python main.py --mode ai --agent agents.my_agent.MyAgent --speed 12 --grid 15 --seed 7 --spawn random
 ```
 
+Or pick it live: run the game, press `M`, and step the `Agent [n/m]` row
+with `Left/Right` - every `BaseAgent` subclass under `agents/` is detected
+automatically (e.g. `agents/my_agent.py` shows up after a restart). `Enter`
+on an `Agent` row applies all settings + starts a new game in AI mode.
+
 ## 2. State dict (input to your algorithm)
 
 | Key | Type | Meaning |

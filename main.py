@@ -4,6 +4,8 @@ Human:  PYTHON main.py --mode human
 AI:     PYTHON main.py --mode ai --agent agents.random_agent.RandomAgent
 """
 from __future__ import annotations
+import inspect
+import pkgutil
 
 import argparse
 import importlib
@@ -35,11 +37,56 @@ GRID_MAX = 30
 LENGTH_MIN = 1
 
 
-def clamp_speed(value: float, maximum: float) -> float:
+def discover_agents(package="agents"):
+    """Dotted paths of BaseAgent subclasses found under agents/ (import-safe)."""
+    try:
+        pkg = importlib.import_module(package)
+        mods = sorted(m.name for m in pkgutil.iter_modules(getattr(pkg, "__path__", [])))
+    except Exception:
+        return []
+    found = []
+    for name in mods:
+        if name.startswith("_"):
+            continue
+        try:
+            mod = importlib.import_module(package + "." + name)
+        except Exception:
+            continue
+        for cls_name in sorted(vars(mod)):
+            if cls_name.startswith("_"):
+                continue
+            try:
+                cls = getattr(mod, cls_name)
+                ok = inspect.isclass(cls) and issubclass(cls, BaseAgent) and cls is not BaseAgent
+            except Exception:
+                continue
+            if ok:
+                path = package + "." + name + "." + cls_name
+                if path not in found:
+                    found.append(path)
+    return found
+
+
+def cycle_agent(current, options, delta):
+    """Left/Right agent step; unknown current snaps to nearest known entry."""
+    if not options:
+        return current
+    i = options.index(current) if current in options else 0
+    return options[(i + delta) % len(options)]
+
+def clamp_speed(value, maximum) -> float:
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        value = SPEED_MIN
     return max(SPEED_MIN, min(maximum, value))
 
 
-def clamp_int(value: int, low: int, high: int) -> int:
+def clamp_int(value, low, high) -> int:
+    try:
+        value = int(float(value))
+    except (TypeError, ValueError):
+        value = low
     return max(low, min(high, value))
 
 
@@ -63,12 +110,19 @@ def new_settings(mode: str, agent_path: str, config: Config,
     }
 
 
-def menu_hint(draft: dict) -> list[str]:
+def menu_hint(draft, agents=None):
+    agent = str(draft.get("agent", ""))
+    if agents:
+        pos = agents.index(agent) + 1 if agent in agents else 0
+        agent_line = "Agent [%d/%d]: %s" % (pos, len(agents), agent)
+    else:
+        agent_line = "Agent: " + agent + " (no agents detected)"
+    AGENT_LINE = agent_line
     return [
         f"Control: {draft['mode'].upper()} ({'AI agent' if draft['mode'] == 'ai' else 'human keys'})",
-        f"Agent: {draft['agent']}",
-        f"Speed: {draft['speed']:.1f} steps/s",
-        f"Grid: {draft['grid']} (arena {draft['grid']}^3)",
+        AGENT_LINE,
+        "Speed: %s steps/s" % str(draft["speed"]),
+        "Grid: %s (arena %sx%sx%s)" % (str(draft["grid"]), str(draft["grid"]), str(draft["grid"]), str(draft["grid"])),
         f"Wrap: {'ON' if draft['wrap'] else 'OFF'} (walls {'wrap' if draft['wrap'] else 'kill'})",
         f"Rotate: {'ON' if draft['rotate'] else 'OFF'}",
         f"Spawn: {draft['spawn']}",
@@ -84,14 +138,16 @@ def cycle(value: str, options: tuple, delta: int) -> str:
     return options[(i + delta) % len(options)]
 
 
-def adjust_draft(draft: dict, row: int, delta: int, maximum: float) -> None:
+def adjust_draft(draft: dict, row: int, delta: int, maximum: float, agents: list | None = None) -> None:
     """Left/Right tweak of the selected menu row (headless-testable)."""
     if row == 0:
         draft["mode"] = cycle(draft["mode"], SETTING_MODES, delta)
+    elif row == 1:
+        draft["agent"] = cycle_agent(str(draft["agent"]), list(agents or []), delta)
     elif row == 2:
-        draft["speed"] = round(clamp_speed(draft["speed"] + delta * SPEED_STEP, maximum), 1)
+        draft["speed"] = round(clamp_speed(clamp_speed(draft["speed"], 1e9) + delta * SPEED_STEP, maximum), 1)
     elif row == 3:
-        draft["grid"] = clamp_int(draft["grid"] + delta, GRID_MIN, GRID_MAX)
+        draft["grid"] = clamp_int(clamp_int(draft["grid"], GRID_MIN, GRID_MAX) + delta, GRID_MIN, GRID_MAX)
     elif row == 4:
         draft["wrap"] = not draft["wrap"]
     elif row == 5:
@@ -102,7 +158,7 @@ def adjust_draft(draft: dict, row: int, delta: int, maximum: float) -> None:
         draft["dir"] = cycle(draft["dir"], SETTING_DIRS, delta)
     elif row == 10:
         n = clamp_int(draft["grid"], GRID_MIN, GRID_MAX)
-        draft["length"] = clamp_int(draft["length"] + delta, LENGTH_MIN, n)
+        draft["length"] = clamp_int(clamp_int(draft["length"], LENGTH_MIN, GRID_MAX) + delta, LENGTH_MIN, n)
 
 
 def apply_draft(draft: dict, args: argparse.Namespace, config: Config,
@@ -258,6 +314,7 @@ def main() -> None:
     last = time.perf_counter()
     msg = ""
     menu_open = menu_error != ""
+    agent_options = discover_agents()
     draft = new_settings(mode, args.agent, config, seed)
     if menu_error:
         draft["error"] = menu_error
@@ -305,20 +362,20 @@ def main() -> None:
                         menu_open = False
                         draft["error"] = ""
                     elif event.key in (pygame.K_UP, pygame.K_w):
-                        row = (row - 1) % len(menu_hint(draft))
+                        row = (row - 1) % len(menu_hint(draft, agent_options))
                     elif event.key in (pygame.K_DOWN, pygame.K_s):
-                        row = (row + 1) % len(menu_hint(draft))
+                        row = (row + 1) % len(menu_hint(draft, agent_options))
                     elif event.key in (pygame.K_LEFT, pygame.K_a):
                         draft["error"] = ""
-                        adjust_draft(draft, row, -1, config.max_steps_per_second)
+                        adjust_draft(draft, row, -1, config.max_steps_per_second, agent_options)
                     elif event.key in (pygame.K_RIGHT, pygame.K_d):
                         draft["error"] = ""
-                        adjust_draft(draft, row, 1, config.max_steps_per_second)
+                        adjust_draft(draft, row, 1, config.max_steps_per_second, agent_options)
                     elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                        if row == 1:
+                        if row == 1 and not agent_options:
                             edit, edit_buf = "agent", draft["agent"]
-                        elif row in (1, 2, 3, 7, 9, 10):
-                            key = {"1": "agent", "2": "speed", "3": "grid", "7": "pos", "9": "seed", "10": "length"}[str(row)]
+                        elif row in (2, 3, 7, 9, 10):
+                            key = {"2": "speed", "3": "grid", "7": "pos", "9": "seed", "10": "length"}[str(row)]
                             edit, edit_buf = key, str(draft[key])
                         else:
                             mode, agent, seed, err = apply_draft(
@@ -414,13 +471,13 @@ def main() -> None:
         hint = (action_mapping_hint(renderer.camera.yaw, renderer.camera.pitch,
                                     game.direction, game.legal_actions())
                 if mode == "human" else None)
-        footer = (f"Spd {speed:.1f}  Spawn {config.spawn_mode}"
-                  f"{(' ' + ','.join(str(c) for c in config.spawn_pos)) if config.spawn_pos else ''}"
-                  f" {config.spawn_direction}  Seed "
-                  f"{seed if seed is not None else '-'}  Len {config.start_length}"
-                  f"  [Tab] mode  [M] setup  [N] new")
+        footer = "Spd %.1f  %s %s  Seed %s  Len %d  [Tab] mode  [M] setup  [N] new" % (speed, config.spawn_mode, config.spawn_direction, seed if seed is not None else "-", config.start_length)
+        if config.spawn_pos:
+            footer = "Spd %.1f  %s %s %s  Seed %s  Len %d  [Tab] mode  [M] setup  [N] new" % (speed, config.spawn_mode, ",".join(str(c) for c in config.spawn_pos), config.spawn_direction, seed if seed is not None else "-", config.start_length)
+        if mode == "ai":
+            footer += "  AI:" + str(args.agent).split(".")[-1]
         renderer.draw_overlay(state, mode, paused, fps, msg, hint, footer=footer,
-                              menu_lines=menu_hint(draft) if menu_open else None,
+                              menu_lines=menu_hint(draft, agent_options) if menu_open else None,
                               menu_row=row if menu_open else 0,
                               menu_edit=(edit, edit_buf) if menu_open else None,
                               menu_error=draft.get("error", "") if menu_open else "")
