@@ -131,7 +131,7 @@ def test_agent_row_tweak_never_crashes():
     main.adjust_draft(d, 1, 1, 20.0, [])
     assert d["agent"] in opts, d
     rows = main.menu_hint(d, opts)
-    assert rows[1].startswith("Agent [") and "/2" in rows[1], rows[1]
+    assert rows[1].startswith("Agent [") and ("/%d" % len(opts)) in rows[1], rows[1]
 
 
 def test_typed_strings_never_crash_apply():
